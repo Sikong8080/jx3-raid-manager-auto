@@ -2,6 +2,7 @@
 
 mod db;
 mod gkp_parser;
+mod chatlog_parser;
 
 #[cfg(target_os = "windows")]
 fn check_webview2() -> Result<String, String> {
@@ -116,6 +117,11 @@ fn main() {
     builder
         .invoke_handler(tauri::generate_handler![
             gkp_parser::parse_binary_gkp,
+            // 聊天日志解析命令
+            chatlog_parser::find_chatlog_path,
+            chatlog_parser::scan_chatlog_for_role,
+            chatlog_parser::list_available_chatlogs,
+            chatlog_parser::read_chatlog_from_path,
             db::db_init,
             // 新的版本管理命令
             db::db_get_version_info,

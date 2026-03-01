@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Raid, RaidRecord } from '../types';
-import { X, Calendar, Coins, Sparkles, FileText, TrendingUp, TrendingDown, AlertCircle, Shirt, Crown, Package, Ghost, Anchor, Flag, BookOpen } from 'lucide-react';
+import { Raid, RaidRecord, Config, ImportSuggestion } from '../types';
+import { X, Calendar, Coins, Sparkles, FileText, TrendingUp, TrendingDown, AlertCircle, Shirt, Crown, Package, Ghost, Anchor, Flag, BookOpen, Download } from 'lucide-react';
 import { generateUUID } from '../utils/uuid';
 import { logOperation } from '../utils/cooldownManager';
 import { DateTimePicker } from './DateTimePicker';
+import { ImportFromGameModal } from './ImportFromGameModal';
 
 interface RoleWithStatus {
   id: string;
@@ -23,6 +24,7 @@ interface AddRecordModalProps {
   raid: Raid;
   role: RoleWithStatus;
   initialData?: RaidRecord;
+  config?: Config;  // 用于从游戏导入功能啊
 }
 
 export const AddRecordModal: React.FC<AddRecordModalProps> = ({
@@ -31,7 +33,8 @@ export const AddRecordModal: React.FC<AddRecordModalProps> = ({
   onSubmit,
   raid,
   role,
-  initialData
+  initialData,
+  config
 }) => {
   const [goldIncome, setGoldIncome] = useState<number>(0);
   const [goldExpense, setGoldExpense] = useState<number>(0);
@@ -48,6 +51,7 @@ export const AddRecordModal: React.FC<AddRecordModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedBossIds, setSelectedBossIds] = useState<string[]>([]);
   const [recordDate, setRecordDate] = useState<string>('');
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const availableBosses = useMemo(() => {
     return raid.bosses || [];
@@ -109,6 +113,20 @@ export const AddRecordModal: React.FC<AddRecordModalProps> = ({
   const constructRaidName = (): string => {
     return `${raid.playerCount}人${raid.difficulty}${raid.name}`;
   };
+
+  // 处理从游戏导入的数据
+  const handleImportSelect = (suggestion: ImportSuggestion) => {
+    setGoldIncome(suggestion.goldIncome);
+    setGoldExpense(suggestion.goldExpense);
+    setRecordDate(formatDateForInput(suggestion.timestamp));
+    // 在备注中标记数据来源
+    const confidencePercent = Math.round(suggestion.confidence * 100);
+    setNotes(`从游戏导入 (置信度: ${confidencePercent}%)`);
+    setShowImportModal(false);
+  };
+
+  // 检查是否可以使用导入功能
+  const canImport = config && config.game.gameDirectory && !initialData;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,6 +219,18 @@ export const AddRecordModal: React.FC<AddRecordModalProps> = ({
           </div>
 
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
+
+            {/* 从游戏导入按钮 - 仅在新增记录时显示 */}
+            {canImport && (
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                className="w-full px-4 py-2.5 border-2 border-dashed border-primary/30 text-primary rounded-lg font-medium hover:bg-primary/5 hover:border-primary/50 transition-all flex items-center justify-center gap-2 text-sm"
+              >
+                <Download className="w-4 h-4" />
+                从游戏导入
+              </button>
+            )}
 
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-main mb-1.5">
@@ -456,6 +486,23 @@ export const AddRecordModal: React.FC<AddRecordModalProps> = ({
           </form>
         </div>
       </div>
+
+      {/* 从游戏导入弹窗 */}
+      {canImport && config && (
+        <ImportFromGameModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onSelect={handleImportSelect}
+          config={config}
+          role={{
+            id: role.id,
+            name: role.name,
+            server: role.server,
+            region: role.region,
+          }}
+          raid={raid}
+        />
+      )}
     </>,
     document.body
   );

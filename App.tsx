@@ -496,6 +496,7 @@ function App() {
                 onRefreshRecords={reloadRecords}
                 onRefreshTrialRecords={reloadTrialRecords}
                 onRefreshBaizhanRecords={reloadBaizhanRecords}
+                config={config}
               />
             )}
             {activeTab === 'config' && (

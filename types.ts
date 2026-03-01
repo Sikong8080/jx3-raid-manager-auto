@@ -214,3 +214,75 @@ export interface BaizhanRecord {
   notes?: string;
   type: 'baizhan';
 }
+
+// ==================== 聊天日志导入相关类型 ====================
+
+/**
+ * 聊天日志记录（从游戏chatlog.db读取）
+ */
+export interface ChatlogRecord {
+  time: number;       // 时间戳（秒）
+  text: string;       // 聊天文本
+  msg: string;        // 消息内容
+}
+
+/**
+ * 聊天日志扫描请求参数
+ */
+export interface ChatlogScanRequest {
+  gameDirectory: string;
+  roleName: string;
+  timeStart: number;  // 开始时间戳（秒）
+  timeEnd: number;    // 结束时间戳（秒）
+}
+
+/**
+ * 聊天日志扫描结果
+ */
+export interface ChatlogScanResult {
+  success: boolean;
+  records: ChatlogRecord[];
+  chatlogPath?: string;
+  error?: string;
+  debugInfo?: string[];  // 调试信息
+}
+
+/**
+ * 查找chatlog.db路径结果
+ */
+export interface FindChatlogPathResult {
+  success: boolean;
+  path?: string;
+  error?: string;
+  debugInfo?: string[];  // 调试信息
+}
+
+/**
+ * 导入建议（匹配GKP和聊天记录后的分析结果）
+ */
+export interface ImportSuggestion {
+  id: string;                     // 建议ID
+  gkpFileName: string;            // GKP文件名
+  gkpFilePath: string;            // GKP文件路径
+  raidName: string;               // 副本名称
+  playerCount: number;            // 人数（10/25）
+  difficulty?: string;            // 难度（普通/英雄/挑战）
+  timestamp: number;              // 副本开始时间戳
+  endTimestamp?: number;          // 副本结束时间戳
+  roleName?: string;              // 角色名
+  goldIncome: number;             // 解析出的收入
+  goldExpense: number;            // 解析出的支出
+  confidence: number;             // 置信度 0-1
+  matchedChatCount: number;       // 匹配的聊天记录数
+  chatRecords: ChatlogRecord[];   // 原始聊天记录（供用户核对）
+}
+
+/**
+ * 金币解析结果
+ */
+export interface GoldParseResult {
+  type: 'income' | 'expense' | 'unknown';
+  amount: number;
+  raw: string;  // 原始文本
+}
+

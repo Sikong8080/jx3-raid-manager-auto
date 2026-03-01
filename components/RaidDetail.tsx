@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Account, Raid, RaidRecord, BossCooldownInfo } from '../types';
+import { Account, Raid, RaidRecord, BossCooldownInfo, Config } from '../types';
 import { Shield, Calendar, TrendingUp, TrendingDown, RefreshCw, Clock, Copy, Check } from 'lucide-react';
 import { AddRecordModal } from './AddRecordModal';
 import { RoleRecordsModal } from './RoleRecordsModal';
@@ -18,6 +18,7 @@ interface RaidDetailProps {
   setRecords?: React.Dispatch<React.SetStateAction<RaidRecord[]>>;
   onEditRecord?: (record: RaidRecord) => void;
   onRefreshRecords?: () => void;
+  config?: Config;
 }
 
 interface RoleWithStatus {
@@ -104,7 +105,7 @@ const RaidRefreshCountdown: React.FC<RaidRefreshCountdownProps> = ({ raid }) => 
   );
 };
 
-export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records, onBack, setRecords, onEditRecord, onRefreshRecords }) => {
+export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records, onBack, setRecords, onEditRecord, onRefreshRecords, config }) => {
 
   const [showAddRecordModal, setShowAddRecordModal] = useState(false);
   const [showRoleRecordsModal, setShowRoleRecordsModal] = useState(false);
@@ -716,6 +717,7 @@ export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records,
           onSubmit={handleAddRecord}
           raid={raid}
           role={selectedRoleForModal}
+          config={config}
         />
       )}
 

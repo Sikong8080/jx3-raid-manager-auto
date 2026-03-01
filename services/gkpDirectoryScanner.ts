@@ -6,6 +6,7 @@ export interface GkpFileInfo {
   timestamp: number;
   playerCount: number;
   mapName: string;
+  difficulty?: string;  // 普通/英雄/挑战
   roleName?: string;
 }
 
@@ -21,24 +22,45 @@ export interface ScanOptions {
   activeRoles?: Array<{ name: string; server: string; region: string }>;
 }
 
-const GKP_FILE_PATTERN = /^(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})_(\d+)人(.+)\.gkp\.jx3dat$/;
+// 格式1: 有人数前缀（如 2026-02-23-21-07-54_25人英雄会战弓月城.gkp.jx3dat）
+const GKP_FILE_PATTERN_WITH_COUNT = /^(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})_(\d+)人(普通|英雄|挑战)?(.+)\.gkp\.jx3dat$/;
+
+// 格式2: 无人数前缀（如 2026-02-04-23-03-44_会战弓月城.gkp.jx3dat），默认10人
+const GKP_FILE_PATTERN_NO_COUNT = /^(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})_(.+)\.gkp\.jx3dat$/;
 
 export function parseGkpFileName(fileName: string): Partial<GkpFileInfo> | null {
-  const match = fileName.match(GKP_FILE_PATTERN);
-  if (!match) {
-    return null;
+  // 先尝试带人数的格式
+  const matchWithCount = fileName.match(GKP_FILE_PATTERN_WITH_COUNT);
+  if (matchWithCount) {
+    const [, timestampStr, playerCountStr, difficulty, mapName] = matchWithCount;
+    const [year, month, day, hour, minute, second] = timestampStr.split('-').map(Number);
+    const timestamp = new Date(year, month - 1, day, hour, minute, second).getTime();
+
+    return {
+      fileName,
+      timestamp,
+      playerCount: parseInt(playerCountStr, 10),
+      difficulty: difficulty || undefined,
+      mapName: mapName.trim()
+    };
   }
 
-  const [, timestampStr, playerCountStr, mapName] = match;
-  const [year, month, day, hour, minute, second] = timestampStr.split('-').map(Number);
-  const timestamp = new Date(year, month - 1, day, hour, minute, second).getTime();
+  // 回退：无人数前缀，默认10人
+  const matchNoCount = fileName.match(GKP_FILE_PATTERN_NO_COUNT);
+  if (matchNoCount) {
+    const [, timestampStr, mapName] = matchNoCount;
+    const [year, month, day, hour, minute, second] = timestampStr.split('-').map(Number);
+    const timestamp = new Date(year, month - 1, day, hour, minute, second).getTime();
 
-  return {
-    fileName,
-    timestamp,
-    playerCount: parseInt(playerCountStr, 10),
-    mapName: mapName.trim()
-  };
+    return {
+      fileName,
+      timestamp,
+      playerCount: 10,
+      mapName: mapName.trim()
+    };
+  }
+
+  return null;
 }
 
 export async function scanGkpDirectory(options: ScanOptions): Promise<ScanResult> {
@@ -110,7 +132,8 @@ export async function scanGkpDirectory(options: ScanOptions): Promise<ScanResult
                       fileName: gkpEntry.name,
                       timestamp: fileInfo.timestamp!,
                       playerCount: fileInfo.playerCount!,
-                      mapName: fileInfo.mapName!
+                      mapName: fileInfo.mapName!,
+                      difficulty: fileInfo.difficulty,
                     };
 
                     files.push(gkpFile);
@@ -192,6 +215,7 @@ export async function scanGkpDirectory(options: ScanOptions): Promise<ScanResult
                         timestamp: fileInfo.timestamp!,
                         playerCount: fileInfo.playerCount!,
                         mapName: fileInfo.mapName!,
+                        difficulty: fileInfo.difficulty,
                         roleName: matchedRoleName
                       };
 
@@ -246,7 +270,7 @@ export async function scanGkpDirectory(options: ScanOptions): Promise<ScanResult
 }
 
 export function isGkpFile(fileName: string): boolean {
-  return GKP_FILE_PATTERN.test(fileName);
+  return GKP_FILE_PATTERN_WITH_COUNT.test(fileName) || GKP_FILE_PATTERN_NO_COUNT.test(fileName);
 }
 
 export function formatGkpFileInfo(file: GkpFileInfo): string {

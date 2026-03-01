@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Raid } from '../types';
+import { Raid, Config } from '../types';
 import { Trash2, Shield, Filter, Power, Star } from 'lucide-react';
 import { getRaidKey } from '../utils/raidUtils';
 import { toast } from '../utils/toastManager';
@@ -22,6 +22,7 @@ interface RaidManagerProps {
   onRefreshRecords?: () => void;
   onRefreshTrialRecords?: () => void;
   onRefreshBaizhanRecords?: () => void;
+  config?: Config;
 }
 
 interface MergedRaid {
@@ -59,7 +60,8 @@ export const RaidManager: React.FC<RaidManagerProps> = ({
   accounts,
   onRefreshRecords,
   onRefreshTrialRecords,
-  onRefreshBaizhanRecords
+  onRefreshBaizhanRecords,
+  config
 }) => {
   const [activeTab, setActiveTab] = useState<'raid' | 'trial' | 'baizhan'>('raid');
   const [selectedRaid, setSelectedRaid] = useState<Raid | null>(null);
@@ -438,6 +440,7 @@ export const RaidManager: React.FC<RaidManagerProps> = ({
           setRecords={setRecords}
           onEditRecord={onEditRecord}
           onRefreshRecords={onRefreshRecords}
+          config={config}
         />
       ) : (
         <>
