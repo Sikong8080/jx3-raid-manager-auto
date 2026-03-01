@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Account, Raid, RaidRecord, BossCooldownInfo, Config } from '../types';
-import { Shield, Calendar, TrendingUp, TrendingDown, RefreshCw, Clock, Copy, Check } from 'lucide-react';
+import { Shield, Calendar, TrendingUp, TrendingDown, RefreshCw, Clock, Copy, Check, Users, Trash2 } from 'lucide-react';
 import { AddRecordModal } from './AddRecordModal';
 import { RoleRecordsModal } from './RoleRecordsModal';
+import { BatchImportModal } from './BatchImportModal';
 import { BossCooldownSummary } from './BossCooldownDisplay';
 import { formatGoldAmount } from '../utils/recordUtils';
 import { calculateCooldown, formatCountdown, getRaidRefreshInfo, CooldownInfo, getLastMonday, getNextMonday } from '../utils/cooldownManager';
@@ -109,6 +110,9 @@ export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records,
 
   const [showAddRecordModal, setShowAddRecordModal] = useState(false);
   const [showRoleRecordsModal, setShowRoleRecordsModal] = useState(false);
+  const [showBatchImportModal, setShowBatchImportModal] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [selectedRoleForModal, setSelectedRoleForModal] = useState<RoleWithStatus | null>(null);
   const [successToast, setSuccessToast] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
 
@@ -185,6 +189,55 @@ export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records,
     showToast('记录添加成功', 3000);
     console.log('[RaidDetail] Closing modal...');
     setShowAddRecordModal(false);
+  };
+
+  const handleBatchImport = async (records: Partial<RaidRecord>[]) => {
+    console.log('[RaidDetail] handleBatchImport called with:', records.length, 'records');
+    try {
+      for (const record of records) {
+        await db.addRecord(record as RaidRecord);
+      }
+      onRefreshRecords?.();
+      showToast(`成功导入 ${records.length} 条记录`, 3000);
+    } catch (error) {
+      console.error('批量导入失败:', error);
+      throw error;
+    }
+  };
+
+  // 清空本周期数据
+  const handleClearPeriodData = async () => {
+    setIsClearing(true);
+    try {
+      const safeRecords = Array.isArray(records) ? records : [];
+      const periodStartTime = weekInfo.start.getTime();
+      const periodEndTime = weekInfo.end.getTime();
+
+      // 找出本周期内当前副本的所有记录
+      const recordsToDelete = safeRecords.filter(r => {
+        const matchesName = r.raidName.includes(raid.name);
+        const matchesDifficulty = r.raidName.includes(raid.difficulty);
+        const matchesPlayerCount = r.raidName.includes(`${raid.playerCount}人`);
+        const recordTime = new Date(r.date).getTime();
+        const inPeriod = recordTime >= periodStartTime && recordTime < periodEndTime;
+
+        return matchesName && matchesDifficulty && matchesPlayerCount && inPeriod;
+      });
+
+      // 逐个删除记录
+      for (const record of recordsToDelete) {
+        await db.deleteRecord(record.id);
+      }
+
+      onRefreshRecords?.();
+      showToast(`已清空 ${recordsToDelete.length} 条记录`, 3000);
+      setShowClearConfirm(false);
+    } catch (error) {
+      console.error('清空数据失败:', error);
+      showToast('清空数据失败，请重试', 3000);
+    } finally {
+      setIsClearing(false);
+    }
   };
 
   const weekInfo = useMemo(() => {
@@ -464,6 +517,20 @@ export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records,
           </div>
 
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowBatchImportModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
+            >
+              <Users className="w-4 h-4" />
+              批量导入
+            </button>
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              清空本期
+            </button>
             <div className="flex items-center gap-1.5 text-sm">
               <span className="font-bold text-emerald-600">{noneClearedCount}</span>
               <span className="text-muted text-xs">未清</span>
@@ -721,6 +788,27 @@ export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records,
         />
       )}
 
+      {showBatchImportModal && (
+        <BatchImportModal
+          isOpen={showBatchImportModal}
+          onClose={() => setShowBatchImportModal(false)}
+          onSubmit={handleBatchImport}
+          raid={raid}
+          roles={sortedRoles.map(r => ({
+            id: r.id,
+            name: r.name,
+            server: r.server,
+            region: r.region,
+            sect: r.sect,
+            accountId: r.accountId,
+            accountName: r.accountName,
+            canAddMore: r.canAddMore,
+            equipmentScore: r.equipmentScore,
+          }))}
+          config={config}
+        />
+      )}
+
       {successToast.visible && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-2 text-sm font-medium animate-in z-[9999]">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -742,6 +830,54 @@ export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records,
           onEditRecord={onEditRecord}
           onRefreshRecords={onRefreshRecords}
         />
+      )}
+
+      {/* 清空确认弹窗 */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-surface rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-main">清空本期数据</h3>
+                  <p className="text-sm text-muted">此操作不可撤销</p>
+                </div>
+              </div>
+              <p className="text-sm text-muted mb-6">
+                确定要清空本周期内 <span className="font-medium text-main">{raid.playerCount}人{raid.difficulty}{raid.name}</span> 的所有记录吗？
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowClearConfirm(false)}
+                  disabled={isClearing}
+                  className="flex-1 px-4 py-2.5 border border-base text-main rounded-lg font-medium hover:bg-base transition-colors text-sm"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleClearPeriodData}
+                  disabled={isClearing}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors text-sm flex items-center justify-center gap-2"
+                >
+                  {isClearing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      <span>清空中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>确认清空</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
