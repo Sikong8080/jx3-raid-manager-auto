@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Account, Raid, RaidRecord, BossCooldownInfo, Config } from '../types';
-import { Shield, Calendar, TrendingUp, TrendingDown, RefreshCw, Clock, Copy, Check, Users, Trash2 } from 'lucide-react';
+import { Shield, Calendar, TrendingUp, TrendingDown, RefreshCw, Clock, Copy, Check, Users, Trash2, Search, X } from 'lucide-react';
 import { AddRecordModal } from './AddRecordModal';
 import { RoleRecordsModal } from './RoleRecordsModal';
 import { BatchImportModal } from './BatchImportModal';
@@ -117,6 +117,7 @@ export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records,
   const [successToast, setSuccessToast] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
 
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const toastTimerRef = useRef<number | null>(null);
 
   const cleanRoleName = (name: string) => {
@@ -430,8 +431,17 @@ export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records,
     return roles;
   }, [accounts, records, raid, weekInfo]);
 
+  const filteredRoles = useMemo(() => {
+    if (!searchTerm.trim()) return rolesWithStatus;
+    const term = searchTerm.toLowerCase().trim();
+    return rolesWithStatus.filter(role =>
+      role.name.toLowerCase().includes(term) ||
+      role.server.toLowerCase().includes(term)
+    );
+  }, [rolesWithStatus, searchTerm]);
+
   const sortedRoles = useMemo(() => {
-    const sorted = [...rolesWithStatus];
+    const sorted = [...filteredRoles];
 
     sorted.sort((a, b) => {
       // 1. BOSS 完成状态优先（未清 > 部分清完 > 完全清完）
@@ -469,20 +479,20 @@ export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records,
     });
 
     return sorted;
-  }, [rolesWithStatus]);
+  }, [filteredRoles]);
 
   // 计算三态统计：未清、部分清、完全清
-  const noneClearedCount = rolesWithStatus.filter(r => {
+  const noneClearedCount = filteredRoles.filter(r => {
     if (!r.bossCooldowns || r.bossCooldowns.length === 0) return r.canRun;
     return r.bossCooldowns.filter(b => b.hasRecord).length === 0;
   }).length;
-  const partialClearedCount = rolesWithStatus.filter(r => {
+  const partialClearedCount = filteredRoles.filter(r => {
     if (!r.bossCooldowns || r.bossCooldowns.length === 0) return false;
     const completedCount = r.bossCooldowns.filter(b => b.hasRecord).length;
     const totalCount = r.bossCooldowns.length;
     return completedCount > 0 && completedCount < totalCount;
   }).length;
-  const completeClearedCount = rolesWithStatus.filter(r => {
+  const completeClearedCount = filteredRoles.filter(r => {
     if (!r.bossCooldowns || r.bossCooldowns.length === 0) return !r.canRun;
     const completedCount = r.bossCooldowns.filter(b => b.hasRecord).length;
     return completedCount === r.bossCooldowns.length;
@@ -546,11 +556,37 @@ export const RaidDetail: React.FC<RaidDetailProps> = ({ raid, accounts, records,
           </div>
         </div>
 
+        {/* 搜索筛选栏 */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 sm:flex-none">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+            <input
+              type="text"
+              placeholder="搜索角色名或区服..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="pl-9 pr-8 py-1.5 w-full sm:w-64 bg-surface border border-base rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary placeholder:text-muted text-main transition-all"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-primary p-1 rounded-md hover:bg-base/80 transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          {searchTerm && (
+            <span className="text-sm text-muted">
+              找到 <span className="font-medium text-emerald-600">{filteredRoles.length}</span> 个角色
+            </span>
+          )}
+        </div>
 
         {/* Role Cards */}
         {sortedRoles.length === 0 ? (
           <div className="text-center py-8 text-muted bg-surface rounded-xl border border-base border-dashed">
-            没有找到符合条件的角色，请先在账号管理中添加并启用角色
+            {searchTerm.trim() ? '未找到匹配的角色' : '没有找到符合条件的角色，请先在账号管理中添加并启用角色'}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

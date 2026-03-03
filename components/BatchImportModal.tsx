@@ -4,7 +4,8 @@ import { Raid, RaidRecord, Config, ImportSuggestion } from '../types';
 import { X, AlertCircle, Users, Check, CheckSquare, Square, RefreshCw, TrendingUp, TrendingDown, FileText, Search } from 'lucide-react';
 import { generateUUID } from '../utils/uuid';
 import { scanGkpDirectory } from '../services/gkpDirectoryScanner';
-import { matchGkpWithChatlog, getRecentGkpFiles } from '../services/importMatcher';
+import { matchGkpWithChatlog } from '../services/importMatcher';
+import { getLastMonday, getNextMonday } from '../utils/cooldownManager';
 
 interface RoleForBatchImport {
   id: string;
@@ -70,6 +71,15 @@ export const BatchImportModal: React.FC<BatchImportModalProps> = ({
     return scanResults.filter(r => r.status === 'success' && r.suggestion);
   }, [scanResults]);
 
+  // 当前周期时间范围
+  const periodRange = useMemo(() => {
+    const now = new Date();
+    return {
+      start: getLastMonday(now).getTime(),
+      end: getNextMonday(now).getTime(),
+    };
+  }, []);
+
   const gameDirectory = config?.game?.gameDirectory;
 
   // 初始化
@@ -116,21 +126,23 @@ export const BatchImportModal: React.FC<BatchImportModalProps> = ({
         };
       }
 
-      // 过滤最近7天的文件
-      const recentFiles = getRecentGkpFiles(gkpResult.files, 7);
-      if (recentFiles.length === 0) {
+      // 过滤当前周期内的文件
+      const periodFiles = gkpResult.files.filter(
+        file => file.timestamp >= periodRange.start && file.timestamp < periodRange.end
+      );
+      if (periodFiles.length === 0) {
         return {
           roleId: role.id,
           roleName: role.name,
           server: role.server,
           accountName: role.accountName,
           status: 'no_data',
-          error: '最近7天无记录',
+          error: '本周期无记录',
         };
       }
 
       // 按当前副本过滤
-      const matchedFiles = recentFiles.filter(f => {
+      const matchedFiles = periodFiles.filter(f => {
         if (f.playerCount !== raid.playerCount) return false;
         if (!f.mapName.includes(raid.name) && !raid.name.includes(f.mapName)) return false;
         const gkpDifficulty = f.difficulty || '普通';
