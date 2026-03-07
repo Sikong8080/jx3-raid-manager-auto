@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Config } from '../types';
-import { Check, AlertTriangle, Save, FolderOpen, Settings, Network, Zap } from 'lucide-react';
+import { Config, UpdateInfo } from '../types';
+import { Check, AlertTriangle, Save, FolderOpen, Settings, Network, Zap, RefreshCw, ArrowUpCircle } from 'lucide-react';
 import {
   validateConfig,
   saveConfigToStorage,
@@ -16,14 +16,19 @@ import { aiService } from '../services/ai';
 interface ConfigManagerProps {
   config: Config;
   setConfig: React.Dispatch<React.SetStateAction<Config>>;
+  updateInfo: UpdateInfo | null;
+  onCheckUpdate: () => Promise<UpdateInfo | null>;
+  onShowUpdateModal: () => void;
 }
 
-export const ConfigManager: React.FC<ConfigManagerProps> = ({ config, setConfig }) => {
+export const ConfigManager: React.FC<ConfigManagerProps> = ({ config, setConfig, updateInfo, onCheckUpdate, onShowUpdateModal }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [pathValid, setPathValid] = useState<boolean | null>(null);
   const [testingAI, setTestingAI] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateCheckResult, setUpdateCheckResult] = useState<string | null>(null);
 
   // 使用 useRef 跟踪最新的配置值
   const configRef = useRef(config);
@@ -407,6 +412,70 @@ export const ConfigManager: React.FC<ConfigManagerProps> = ({ config, setConfig 
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* 版本与更新 */}
+      <div className="bg-surface p-6 rounded-xl shadow-sm border border-base">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-primary/10 text-primary rounded-lg flex items-center justify-center">
+            <ArrowUpCircle className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-main">版本与更新</h3>
+            <p className="text-xs text-muted">检查并安装最新版本</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-4 bg-base/50 rounded-lg border border-base">
+            <div>
+              <h4 className="text-sm font-medium text-main">当前版本</h4>
+              <p className="text-xs text-muted mt-0.5">v{__APP_VERSION__}</p>
+            </div>
+            {updateInfo ? (
+              <button
+                onClick={onShowUpdateModal}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-sm font-medium rounded-lg border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
+              >
+                <ArrowUpCircle className="w-4 h-4" />
+                新版本 v{updateInfo.version} 可用
+              </button>
+            ) : (
+              <button
+                onClick={async () => {
+                  setCheckingUpdate(true);
+                  setUpdateCheckResult(null);
+                  try {
+                    const info = await onCheckUpdate();
+                    if (!info) {
+                      setUpdateCheckResult('已是最新版本');
+                    }
+                  } catch {
+                    setUpdateCheckResult('检查更新失败，请稍后重试');
+                  } finally {
+                    setCheckingUpdate(false);
+                  }
+                }}
+                disabled={checkingUpdate}
+                className="btn btn-secondary flex items-center gap-2 text-sm"
+              >
+                {checkingUpdate ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5" />
+                )}
+                {checkingUpdate ? '检查中...' : '检查更新'}
+              </button>
+            )}
+          </div>
+
+          {updateCheckResult && !updateInfo && (
+            <div className="flex items-center gap-2 text-sm text-muted px-1">
+              <Check className="w-4 h-4 text-emerald-500" />
+              {updateCheckResult}
+            </div>
+          )}
         </div>
       </div>
     </div>

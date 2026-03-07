@@ -524,7 +524,21 @@ function App() {
               />
             )}
             {activeTab === 'config' && (
-              <ConfigManager key={`config-${contentKey}`} config={config} setConfig={setConfig} />
+              <ConfigManager
+                key={`config-${contentKey}`}
+                config={config}
+                setConfig={setConfig}
+                updateInfo={updateInfo}
+                onCheckUpdate={async () => {
+                  const info = await checkForUpdates();
+                  if (info) {
+                    setUpdateInfo(info);
+                    setShowUpdateModal(true);
+                  }
+                  return info;
+                }}
+                onShowUpdateModal={() => setShowUpdateModal(true)}
+              />
             )}
           </>
         )}
