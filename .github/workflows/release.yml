@@ -36,10 +36,37 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Rename exe file
         run: |
           mv src-tauri/target/release/JX3RaidManager.exe src-tauri/target/release/JX3RaidManager_${{ github.ref_name }}.exe || true
+
+      - name: Debug - List bundle files
+        shell: pwsh
+        run: |
+          Write-Host "=== NSIS bundle directory ==="
+          if (Test-Path "src-tauri/target/release/bundle/nsis") {
+            Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Recurse | ForEach-Object {
+              Write-Host $_.FullName
+            }
+          } else {
+            Write-Host "nsis directory does not exist!"
+            Write-Host "=== All bundle directories ==="
+            Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -Directory | ForEach-Object {
+              Write-Host $_.FullName
+            }
+          }
+          Write-Host ""
+          Write-Host "=== TAURI_SIGNING_PRIVATE_KEY set? ==="
+          if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+            Write-Host "Yes, length: $($env:TAURI_SIGNING_PRIVATE_KEY.Length) chars"
+          } else {
+            Write-Host "NO - key is empty or not set!"
+          }
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
       - name: Generate latest.json for updater
         shell: pwsh
@@ -49,15 +76,24 @@ jobs:
           $version = $conf.version
 
           # 查找 .nsis.zip.sig 签名文件
-          $sigFile = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis/*.nsis.zip.sig" | Select-Object -First 1
+          $sigFile = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis/*.nsis.zip.sig" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $sigFile) {
-            Write-Error "未找到 .nsis.zip.sig 签名文件，请确保 TAURI_PRIVATE_KEY 已正确配置"
-            exit 1
+            Write-Host "未找到 .nsis.zip.sig，尝试查找所有 .sig 文件..."
+            $sigFile = Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -Filter "*.sig" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $sigFile) {
+              Write-Error "未找到任何签名文件。请确保 TAURI_SIGNING_PRIVATE_KEY 已正确配置且格式正确"
+              exit 1
+            }
+            Write-Host "在其他位置找到签名文件: $($sigFile.FullName)"
           }
           $signature = Get-Content $sigFile.FullName -Raw
 
           # 查找 .nsis.zip 安装包文件名
-          $zipFile = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis/*.nsis.zip" | Select-Object -First 1
+          $zipFile = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis/*.nsis.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $zipFile) {
+            # 回退：查找所有 nsis.zip
+            $zipFile = Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -Filter "*.nsis.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
           $zipFileName = $zipFile.Name
 
           # 组装 Tauri 2 updater 标准格式的 latest.json
