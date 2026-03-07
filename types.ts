@@ -286,3 +286,15 @@ export interface GoldParseResult {
   raw: string;  // 原始文本
 }
 
+// ==================== 自动更新相关类型 ====================
+
+/** 更新信息 */
+export interface UpdateInfo {
+  version: string;
+  body: string | null;
+  date: string | null;
+}
+
+/** 更新状态 */
+export type UpdateState = 'idle' | 'checking' | 'available' | 'up-to-date' | 'downloading' | 'error';
+

@@ -165,9 +165,10 @@ export const BatchImportModal: React.FC<BatchImportModalProps> = ({
       const matchResult = await matchGkpWithChatlog(matchedFiles, {
         gameDirectory,
         roleName: role.name,
-        marginMinutes: 30,
         maxSuggestions: 1,
         minConfidence: 0.1,
+        // 传入所有本周期的GKP文件用于计算时间边界，避免连续副本记录重叠
+        allGkpFilesForBoundary: periodFiles,
       });
 
       if (matchResult.suggestions.length === 0) {

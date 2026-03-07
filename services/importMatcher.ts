@@ -7,7 +7,6 @@ import { ImportSuggestion } from '../types';
 import { GkpFileInfo } from './gkpDirectoryScanner';
 import {
   scanChatlogForRole,
-  expandTimeRange,
   msToSeconds,
 } from './chatlogScanner';
 import {
@@ -23,12 +22,12 @@ import { generateUUID } from '../utils/uuid';
 export interface MatchOptions {
   gameDirectory: string;
   roleName: string;
-  /** 时间范围扩展分钟数，默认30分钟 */
-  marginMinutes?: number;
   /** 最大返回建议数量，默认10条 */
   maxSuggestions?: number;
   /** 最小置信度阈值，默认0.1 */
   minConfidence?: number;
+  /** 所有GKP文件（用于计算时间边界，避免不同副本记录重叠） */
+  allGkpFilesForBoundary?: GkpFileInfo[];
 }
 
 /**
@@ -52,9 +51,9 @@ export async function matchGkpWithChatlog(
   const {
     gameDirectory,
     roleName,
-    marginMinutes = 30,
     maxSuggestions = 10,
     minConfidence = 0.1,
+    allGkpFilesForBoundary,
   } = options;
   
   const suggestions: ImportSuggestion[] = [];
@@ -62,32 +61,56 @@ export async function matchGkpWithChatlog(
   
   scanLogs.push(`[匹配] 游戏目录: ${gameDirectory}`);
   scanLogs.push(`[匹配] 角色名: ${roleName}`);
-  scanLogs.push(`[匹配] 时间扩展: ±${marginMinutes}分钟`);
   scanLogs.push(`[匹配] 待处理GKP文件数: ${gkpFiles.length}`);
   
-  // 按时间倒序排列GKP文件（最新的在前）
-  const sortedGkpFiles = [...gkpFiles].sort((a, b) => b.timestamp - a.timestamp);
+  // 使用所有GKP文件来计算时间边界（如果提供了的话）
+  // 这样可以避免连续打不同副本时，聊天记录被重复计算
+  const boundaryFiles = allGkpFilesForBoundary || gkpFiles;
+  const sortedBoundaryFiles = [...boundaryFiles].sort((a, b) => a.timestamp - b.timestamp);
   
-  // 限制处理数量
-  const filesToProcess = sortedGkpFiles.slice(0, maxSuggestions * 2);
+  if (allGkpFilesForBoundary) {
+    scanLogs.push(`[匹配] 使用 ${allGkpFilesForBoundary.length} 个文件计算时间边界`);
+  }
+  
+  // 按时间正序排列要处理的GKP文件
+  const sortedGkpFiles = [...gkpFiles].sort((a, b) => a.timestamp - b.timestamp);
+  
+  // 限制处理数量（取最新的）
+  const filesToProcess = sortedGkpFiles.slice(-maxSuggestions * 2);
   
   for (const gkpFile of filesToProcess) {
     try {
       // GKP时间戳是毫秒，转换为秒
       const gkpStartSeconds = msToSeconds(gkpFile.timestamp);
       
+      // 在所有边界文件中找到当前文件的位置
+      const currentIndexInBoundary = sortedBoundaryFiles.findIndex(f => f.timestamp === gkpFile.timestamp);
+      const nextBoundaryFile = currentIndexInBoundary >= 0 && currentIndexInBoundary < sortedBoundaryFiles.length - 1
+        ? sortedBoundaryFiles[currentIndexInBoundary + 1]
+        : null;
+      
       // 计算查询时间范围
-      const [timeStart, timeEnd] = expandTimeRange(
-        gkpStartSeconds,
-        undefined, // 没有结束时间，使用默认的开始时间+2小时
-        marginMinutes
-      );
+      // 开始时间：直接使用 GKP 开始时间（不再向前扩展）
+      const timeStart = gkpStartSeconds;
+      
+      // 结束时间：如果有下一个GKP文件，使用它的开始时间；否则使用 GKP时间+2小时
+      let timeEnd: number;
+      if (nextBoundaryFile) {
+        // 使用下一个GKP的开始时间作为边界
+        timeEnd = msToSeconds(nextBoundaryFile.timestamp);
+      } else {
+        // 最后一个文件，使用默认的2小时
+        timeEnd = gkpStartSeconds + 2 * 3600;
+      }
       
       scanLogs.push(`---`);
       scanLogs.push(`[扫描] ${gkpFile.mapName} (${gkpFile.playerCount}人)`);
       scanLogs.push(`  文件: ${gkpFile.fileName}`);
       scanLogs.push(`  GKP时间: ${new Date(gkpFile.timestamp).toLocaleString()}`);
       scanLogs.push(`  查询范围: ${new Date(timeStart * 1000).toLocaleString()} ~ ${new Date(timeEnd * 1000).toLocaleString()}`);
+      if (nextBoundaryFile) {
+        scanLogs.push(`  (结束时间由下一个GKP限制: ${nextBoundaryFile.fileName})`);
+      }
       
       // 扫描聊天日志
       const scanResult = await scanChatlogForRole({
@@ -133,6 +156,14 @@ export async function matchGkpWithChatlog(
       
       // 解析金币信息（从msg字段提取个人收入，从text字段提取个人支出）
       const goldInfo = aggregateGoldFromRecords(chatRecords, roleName);
+      
+      // 调试：打印每笔收入的解析详情
+      goldInfo.incomeRecords.slice(0, 5).forEach((r, i) => {
+        scanLogs.push(`    收入${i + 1}: ${r.amount}金 (原文: ${r.raw?.substring(0, 40)}...)`);
+      });
+      goldInfo.expenseRecords.slice(0, 5).forEach((r, i) => {
+        scanLogs.push(`    支出${i + 1}: ${r.amount}金 (原文: ${r.raw?.substring(0, 40)}...)`);
+      });
       
       // 计算置信度
       const confidence = calculateConfidence(

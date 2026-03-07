@@ -85,6 +85,10 @@ export function hasGoldInfo(text: string): boolean {
  *   text="0" name="Text_Silver"   → 银
  *   text="0" name="Text_Copper"   → 铜
  * 
+ * 注意：游戏中这些字段存储的是各单位的实际数量
+ * 例如：639金46银50铜 存储为 Text_Gold=639, Text_Silver=46, Text_Copper=50
+ * 显示时会合并为总铜币数 6394650
+ * 
  * @returns 金额（单位：金），0表示无收入数据
  */
 export function parsePersonalIncomeFromMsg(msg: string): number {
@@ -98,8 +102,6 @@ export function parsePersonalIncomeFromMsg(msg: string): number {
 
   let goldBricks = 0;
   let gold = 0;
-  let silver = 0;
-  let copper = 0;
 
   for (const match of matches) {
     const value = parseInt(match[1], 10);
@@ -107,14 +109,14 @@ export function parsePersonalIncomeFromMsg(msg: string): number {
     switch (coinType) {
       case 'GoldB': goldBricks = value; break;
       case 'Gold': gold = value; break;
-      case 'Silver': silver = value; break;
-      case 'Copper': copper = value; break;
+      // Silver 和 Copper 忽略（太小，不影响结果）
     }
   }
 
-  // 换算为"金"单位 (1金砖=10000金, 1金=1金, 100银=1金, 10000铜=1金)
-  const totalCopper = (goldBricks * 10000 * 10000) + (gold * 10000) + (silver * 100) + copper;
-  return Math.round(totalCopper / 10000);
+  // 直接返回金币数量（金砖换算 + 金），忽略银铜（太小）
+  // 1金砖 = 10000金
+  const totalGold = (goldBricks * 10000) + gold;
+  return totalGold;
 }
 
 /**

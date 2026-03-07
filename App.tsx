@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { LayoutDashboard, Users, Download, Shield, Settings, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Users, Download, Shield, Settings, Sun, Moon, ArrowUpCircle } from 'lucide-react';
 import { useTheme } from './contexts/ThemeContext';
 import { Dashboard } from './components/Dashboard';
 import { IncomeDetail } from './components/IncomeDetail';
@@ -14,7 +14,7 @@ import { ConfigManager } from './components/ConfigManager';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { AddRecordModal } from './components/AddRecordModal';
 import { AddBaizhanRecordModal } from './components/AddBaizhanRecordModal';
-import { Account, RaidRecord, Raid, Config, TrialPlaceRecord, BaizhanRecord, InstanceType, RoleInstanceVisibility } from './types';
+import { Account, RaidRecord, Raid, Config, TrialPlaceRecord, BaizhanRecord, InstanceType, RoleInstanceVisibility, UpdateInfo } from './types';
 import {
   DEFAULT_CONFIG,
   loadConfigFromStorage,
@@ -28,6 +28,8 @@ import { sortAccounts } from './utils/accountUtils';
 import { db } from './services/db';
 import { checkLocalStorageData, migrateLocalStorageData } from './services/migration';
 import { syncEquipment } from './services/jx3BoxApi';
+import { checkForUpdates } from './services/updater';
+import { UpdateModal } from './components/UpdateModal';
 
 function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'accounts' | 'raidManager' | 'config'>('dashboard');
@@ -51,6 +53,8 @@ function App() {
   const [editingRecord, setEditingRecord] = useState<RaidRecord | null>(null);
   const [editingBaizhanRecord, setEditingBaizhanRecord] = useState<BaizhanRecord | null>(null);
   const [instanceTypes, setInstanceTypes] = useState<InstanceType[]>([]);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
 
   // 重新从数据库加载记录
   const reloadRecords = useCallback(async () => {
@@ -198,6 +202,16 @@ function App() {
 
         // Start background sync
         syncEquipment().catch(console.error);
+
+        // 后台检查更新（静默，不阻塞正常使用）
+        checkForUpdates().then((info) => {
+          if (info) {
+            console.log(`发现新版本: v${info.version}`);
+            setUpdateInfo(info);
+          }
+        }).catch(() => {
+          // 更新检查失败不影响正常使用
+        });
       } catch (error) {
         console.error('初始化失败:', error);
         setIsInitialized(true);
@@ -421,6 +435,16 @@ function App() {
             <NavButton active={activeTab === 'accounts'} onClick={() => handleTabChange('accounts')} icon={<Users size={18} />} label="账号管理" />
             <NavButton active={activeTab === 'config'} onClick={() => handleTabChange('config')} icon={<Settings size={18} />} label="配置" />
           </div>
+          {updateInfo && (
+            <button
+              onClick={() => setShowUpdateModal(true)}
+              className="relative p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors app-region-no-drag"
+              title={`新版本 v${updateInfo.version} 可用`}
+            >
+              <ArrowUpCircle size={20} />
+              <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            </button>
+          )}
           <button
             onClick={toggleTheme}
             className="p-2 rounded-lg text-muted hover:text-main hover:bg-base transition-colors app-region-no-drag"
@@ -593,6 +617,15 @@ function App() {
           }}
           accounts={accounts}
           initialData={editingBaizhanRecord}
+        />
+      )}
+
+      {/* Update Modal */}
+      {showUpdateModal && updateInfo && (
+        <UpdateModal
+          isOpen={showUpdateModal}
+          onClose={() => setShowUpdateModal(false)}
+          updateInfo={updateInfo}
         />
       )}
 

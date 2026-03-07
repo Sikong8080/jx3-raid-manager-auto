@@ -3,12 +3,13 @@
  * 扫描GKP文件和聊天日志，展示分析结果供用户选择
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download, RefreshCw, AlertCircle, CheckCircle2, TrendingUp, TrendingDown, Clock, FileText, ChevronRight, Copy, Check } from 'lucide-react';
 import { ImportSuggestion, Config, Raid } from '../types';
 import { scanGkpDirectory } from '../services/gkpDirectoryScanner';
-import { matchGkpWithChatlog, getRecentGkpFiles, formatSuggestionDisplay } from '../services/importMatcher';
+import { matchGkpWithChatlog, formatSuggestionDisplay } from '../services/importMatcher';
+import { getLastMonday, getNextMonday } from '../utils/cooldownManager';
 
 interface RoleInfo {
   id: string;
@@ -46,6 +47,15 @@ export const ImportFromGameModal: React.FC<ImportFromGameModalProps> = ({
   const [showLogs, setShowLogs] = useState(false);
 
   const gameDirectory = config.game.gameDirectory;
+
+  // 当前周期时间范围
+  const periodRange = useMemo(() => {
+    const now = new Date();
+    return {
+      start: getLastMonday(now).getTime(),
+      end: getNextMonday(now).getTime(),
+    };
+  }, []);
 
   // 执行扫描
   const performScan = useCallback(async () => {
@@ -103,20 +113,25 @@ export const ImportFromGameModal: React.FC<ImportFromGameModalProps> = ({
         addLog(`[GKP] ... 还有 ${gkpResult.files.length - 5} 个文件`);
       }
 
-      // 只处理最近7天的文件
-      const recentFiles = getRecentGkpFiles(gkpResult.files, 7);
-      addLog(`[GKP] 最近7天内的文件: ${recentFiles.length} 个`);
+      // 只处理当前周期内的文件
+      const periodFiles = gkpResult.files.filter(
+        file => file.timestamp >= periodRange.start && file.timestamp < periodRange.end
+      );
+      const periodStartStr = new Date(periodRange.start).toLocaleString();
+      const periodEndStr = new Date(periodRange.end).toLocaleString();
+      addLog(`[GKP] 当前周期: ${periodStartStr} ~ ${periodEndStr}`);
+      addLog(`[GKP] 本周期内的文件: ${periodFiles.length} 个`);
       
-      if (recentFiles.length === 0) {
-        addLog(`[GKP] 最近7天内没有副本记录`);
-        setErrorMessage('最近7天内没有副本记录');
+      if (periodFiles.length === 0) {
+        addLog(`[GKP] 本周期内没有副本记录`);
+        setErrorMessage('本周期内没有副本记录');
         setStatus('error');
         return;
       }
 
       // 按当前副本过滤GKP文件（名称+人数+难度）
       const raidFullName = `${raid.playerCount}人${raid.difficulty}${raid.name}`;
-      const matchedFiles = recentFiles.filter(f => {
+      const matchedFiles = periodFiles.filter(f => {
         // 人数必须匹配
         if (f.playerCount !== raid.playerCount) return false;
         // 副本名称必须匹配（GKP的mapName应与raid.name一致）
@@ -129,9 +144,9 @@ export const ImportFromGameModal: React.FC<ImportFromGameModalProps> = ({
       addLog(`[GKP] 匹配当前副本 [${raidFullName}] 的文件: ${matchedFiles.length} 个`);
 
       if (matchedFiles.length === 0) {
-        addLog(`[GKP] 最近7天内没有匹配 [${raidFullName}] 的记录`);
-        addLog(`[提示] 可用文件: ${recentFiles.map(f => `${f.playerCount}人${f.difficulty || ''}${f.mapName}`).join(', ')}`);
-        setErrorMessage(`最近7天内没有 [${raidFullName}] 的GKP记录`);
+        addLog(`[GKP] 本周期内没有匹配 [${raidFullName}] 的记录`);
+        addLog(`[提示] 可用文件: ${periodFiles.map(f => `${f.playerCount}人${f.difficulty || ''}${f.mapName}`).join(', ')}`);
+        setErrorMessage(`本周期内没有 [${raidFullName}] 的GKP记录`);
         setStatus('error');
         return;
       }
@@ -141,9 +156,10 @@ export const ImportFromGameModal: React.FC<ImportFromGameModalProps> = ({
       const matchResult = await matchGkpWithChatlog(matchedFiles, {
         gameDirectory,
         roleName: role.name,
-        marginMinutes: 30,
         maxSuggestions: 10,
         minConfidence: 0.1,
+        // 传入所有本周期的GKP文件用于计算时间边界，避免连续副本记录重叠
+        allGkpFilesForBoundary: periodFiles,
       });
 
       // 合并匹配器返回的日志
