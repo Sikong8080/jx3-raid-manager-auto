@@ -97,9 +97,10 @@ jobs:
           $zipFileName = $zipFile.Name
 
           # 组装 Tauri 2 updater 标准格式的 latest.json
+          # 下载 URL 使用 Cloudflare Worker 代理，避免国内无法访问 GitHub
           $tagName = "${{ github.ref_name }}"
-          $repoUrl = "https://github.com/${{ github.repository }}"
-          $downloadUrl = "$repoUrl/releases/download/$tagName/$zipFileName"
+          $workerUrl = "https://jx3-raid-manager-auto.690683262.workers.dev"
+          $downloadUrl = "$workerUrl/update/download/$zipFileName"
 
           $latest = @{
             version = $version

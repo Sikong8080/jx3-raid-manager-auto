@@ -28,35 +28,55 @@ const GKP_FILE_PATTERN_WITH_COUNT = /^(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})_(\d+
 // 格式2: 无人数前缀（如 2026-02-04-23-03-44_会战弓月城.gkp.jx3dat），默认10人
 const GKP_FILE_PATTERN_NO_COUNT = /^(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})_(.+)\.gkp\.jx3dat$/;
 
+/**
+ * 特殊副本GKP文件名映射表
+ * 部分副本的GKP文件名与常规命名规则不一致，需要在此特殊处理
+ * key: GKP文件中实际的副本名称
+ * value: 正确的 playerCount 和 difficulty
+ */
+const GKP_SPECIAL_MAP_NAME_OVERRIDES: Record<string, { playerCount: number; difficulty: string }> = {
+  // 缚罪之渊的GKP文件名没有"25人挑战"前缀，实际为25人挑战难度
+  '缚罪之渊': { playerCount: 25, difficulty: '挑战' },
+};
+
 export function parseGkpFileName(fileName: string): Partial<GkpFileInfo> | null {
   // 先尝试带人数的格式
   const matchWithCount = fileName.match(GKP_FILE_PATTERN_WITH_COUNT);
   if (matchWithCount) {
-    const [, timestampStr, playerCountStr, difficulty, mapName] = matchWithCount;
+    const [, timestampStr, playerCountStr, difficulty, rawMapName] = matchWithCount;
     const [year, month, day, hour, minute, second] = timestampStr.split('-').map(Number);
     const timestamp = new Date(year, month - 1, day, hour, minute, second).getTime();
+    const mapName = rawMapName.trim();
+
+    // 检查是否有特殊副本名称覆盖
+    const override = GKP_SPECIAL_MAP_NAME_OVERRIDES[mapName];
 
     return {
       fileName,
       timestamp,
-      playerCount: parseInt(playerCountStr, 10),
-      difficulty: difficulty || undefined,
-      mapName: mapName.trim()
+      playerCount: override ? override.playerCount : parseInt(playerCountStr, 10),
+      difficulty: override ? override.difficulty : (difficulty || undefined),
+      mapName,
     };
   }
 
   // 回退：无人数前缀，默认10人
   const matchNoCount = fileName.match(GKP_FILE_PATTERN_NO_COUNT);
   if (matchNoCount) {
-    const [, timestampStr, mapName] = matchNoCount;
+    const [, timestampStr, rawMapName] = matchNoCount;
     const [year, month, day, hour, minute, second] = timestampStr.split('-').map(Number);
     const timestamp = new Date(year, month - 1, day, hour, minute, second).getTime();
+    const mapName = rawMapName.trim();
+
+    // 检查是否有特殊副本名称覆盖
+    const override = GKP_SPECIAL_MAP_NAME_OVERRIDES[mapName];
 
     return {
       fileName,
       timestamp,
-      playerCount: 10,
-      mapName: mapName.trim()
+      playerCount: override ? override.playerCount : 10,
+      difficulty: override?.difficulty,
+      mapName,
     };
   }
 
